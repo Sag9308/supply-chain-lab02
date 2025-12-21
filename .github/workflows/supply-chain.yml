@@ -1,0 +1,249 @@
+name: supply-chain
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write   # OIDC for keyless cosign signing
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/supply-chain-app
+  TAG: ${{ github.sha }}
+
+jobs:
+  supply-chain:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # -------------------------
+      # 1) Tooling installieren
+      # -------------------------
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.6.0
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0.16.0
+
+      - name: Install trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          version: latest
+
+      - name: Install semgrep
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install semgrep
+
+      - name: Install checkov
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install checkov
+
+      # -------------------------
+      # 2) Security Scanning (5 Scans)
+      #    Fail if HIGH/CRITICAL > 0
+      # -------------------------
+
+      # (1) SAST - Semgrep
+      - name: SAST (Semgrep) - fail on findings
+        run: |
+          semgrep --version
+          # Beispiel-Regeln: "p/default" ist guter Start.
+          # Optional später: eigene ruleset/policy
+          semgrep scan --config "p/default" --error
+
+      # (2) Dependency / filesystem scan (SCA)
+      - name: SCA (Trivy fs) - fail on HIGH/CRITICAL
+        run: |
+          trivy fs --exit-code 1 --severity HIGH,CRITICAL --no-progress .
+
+      # (3) Dockerfile / config scan
+      - name: Dockerfile/Config (Trivy config) - fail on HIGH/CRITICAL
+        run: |
+          trivy config --exit-code 1 --severity HIGH,CRITICAL --no-progress .
+
+      # (4) IaC Scan (Checkov) - fail on HIGH/CRITICAL
+      - name: IaC (Checkov) - fail on HIGH/CRITICAL
+        run: |
+          # Checkov hat unterschiedliche Policies; wir machen strikt.
+          # Falls dein Repo viel "Noise" hat, später gezielt skip/soften.
+          checkov -d . --quiet --soft-fail false
+
+      # -------------------------
+      # 3) Build & Push (with provenance + SBOM via BuildKit)
+      # -------------------------
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push (BuildKit provenance + SBOM)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ env.TAG }}
+            ${{ env.IMAGE_NAME }}:latest
+          provenance: true
+          sbom: true
+
+      - name: Capture digest
+        id: digest
+        run: |
+          echo "DIGEST=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+          echo "IMAGE_REF=${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+          echo "Built image ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+
+      # -------------------------
+      # 4) Create extra attestations:
+      #    - SBOM (Syft)
+      #    - 3x vulnerability attestations (Trivy) for: image + fs + config
+      # -------------------------
+      - name: Generate SBOM (SPDX JSON)
+        run: |
+          syft "${{ steps.digest.outputs.IMAGE_REF }}" -o spdx-json > sbom.spdx.json
+
+      - name: Vulnerability report #1 (Trivy image)
+        run: |
+          trivy image --format json --output vuln-image.json \
+            --severity HIGH,CRITICAL --no-progress "${{ steps.digest.outputs.IMAGE_REF }}" || true
+
+      - name: Vulnerability report #2 (Trivy fs JSON)
+        run: |
+          trivy fs --format json --output vuln-fs.json \
+            --severity HIGH,CRITICAL --no-progress . || true
+
+      - name: Vulnerability report #3 (Trivy config JSON)
+        run: |
+          trivy config --format json --output vuln-config.json \
+            --severity HIGH,CRITICAL --no-progress . || true
+
+      # Hard gate: image vulnerabilities must be zero HIGH/CRITICAL too
+      - name: Enforce image vuln gate (HIGH/CRITICAL must be 0)
+        run: |
+          trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "${{ steps.digest.outputs.IMAGE_REF }}"
+
+      # -------------------------
+      # 5) Keyless signing with GitHub OIDC (cosign)
+      #    Sign image + attestations
+      # -------------------------
+      - name: Cosign sign image (keyless, Rekor upload)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign version
+          cosign sign --yes "${{ steps.digest.outputs.IMAGE_REF }}"
+
+      - name: Cosign attest SBOM (SPDX)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign attest --yes \
+            --predicate sbom.spdx.json \
+            --type spdx \
+            "${{ steps.digest.outputs.IMAGE_REF }}"
+
+      - name: Cosign attest vuln #1 (image)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign attest --yes \
+            --predicate vuln-image.json \
+            --type vuln \
+            "${{ steps.digest.outputs.IMAGE_REF }}"
+
+      - name: Cosign attest vuln #2 (fs)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign attest --yes \
+            --predicate vuln-fs.json \
+            --type vuln \
+            "${{ steps.digest.outputs.IMAGE_REF }}"
+
+      - name: Cosign attest vuln #3 (config)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          cosign attest --yes \
+            --predicate vuln-config.json \
+            --type vuln \
+            "${{ steps.digest.outputs.IMAGE_REF }}"
+
+      # -------------------------
+      # 6) Verification (policy-like checks)
+      #    - verify image signature
+      #    - verify attestations
+      #    - check Rekor entries (expect 6)
+      # -------------------------
+      - name: Verify image signature (identity bound to workflow)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          # Wir pinnen Identität auf den Workflow + Repo.
+          # Das ist genau der "Cloud-Security" Teil: nicht nur "is signed",
+          # sondern "signed by OUR pipeline".
+          cosign verify \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ steps.digest.outputs.IMAGE_REF }}"
+
+      - name: Verify attestations exist
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          # SBOM
+          cosign verify-attestation \
+            --type spdx \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ steps.digest.outputs.IMAGE_REF }}" >/dev/null
+
+          # Vulnerability attestations (3 Stück vorhanden)
+          # Wir prüfen hier presence; in einer Härtung würdest du auch Inhalte auswerten.
+          cosign verify-attestation \
+            --type vuln \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${{ steps.digest.outputs.IMAGE_REF }}" >/dev/null
+
+      - name: Install rekor-cli
+        run: |
+          curl -sSfL https://github.com/sigstore/rekor/releases/latest/download/rekor-cli-linux-amd64 \
+            -o rekor-cli
+          chmod +x rekor-cli
+          sudo mv rekor-cli /usr/local/bin/rekor-cli
+          rekor-cli version
+
+      - name: Check Rekor entries (expect 6)
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          # Suche über Digest.
+          DIGEST="${{ steps.digest.outputs.DIGEST }}"
+          echo "Digest: $DIGEST"
+
+          # Rekor expects sha256:<hex>
+          UUIDS=$(rekor-cli search --sha "$DIGEST" | tr -d '\r' || true)
+          echo "$UUIDS"
+
+          COUNT=$(echo "$UUIDS" | sed '/^\s*$/d' | wc -l | tr -d ' ')
+          echo "Rekor entry count: $COUNT"
+
+          # Erwartung: 6 Entries = 1 Signatur + 5 Attestations
+          # (je nach Registry/OCI-Mode kann es leicht variieren, aber Ziel ist 6)
+          if [ "$COUNT" -lt 6 ]; then
+            echo "Expected at least 6 Rekor entries but got $COUNT"
+            exit 1
+          fi
