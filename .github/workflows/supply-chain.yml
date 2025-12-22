@@ -32,8 +32,6 @@ jobs:
 
       - name: Install trivy
         uses: aquasecurity/trivy-action@0.24.0
-        with:
-          version: latest
 
       - name: Install semgrep
         run: |
@@ -92,7 +90,8 @@ jobs:
         id: build
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: ./src
+          file: ./src/docker/Dockerfile
           push: true
           tags: |
             ${{ env.IMAGE_NAME }}:${{ env.TAG }}
