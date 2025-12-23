@@ -129,11 +129,6 @@ jobs:
       #    - SBOM (Syft)
       #    - 3x vulnerability attestations (Trivy) for: image + fs + config
       # -------------------------
-      - name: Debug – list generated reports
-        run: |
-          ls -la
-          ls -la vuln-*.json sbom.spdx.json
-
       - name: Generate SBOM (SPDX JSON)
         run: |
           syft "${{ steps.digest.outputs.IMAGE_REF }}" -o spdx-json > sbom.spdx.json
@@ -167,6 +162,10 @@ jobs:
         run: |
           trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "${{ steps.digest.outputs.IMAGE_REF }}"
 
+      - name: Debug – list generated reports
+        run: |
+          ls -la
+          ls -la vuln-*.json sbom.spdx.json
       # -------------------------
       # 5) Keyless signing with GitHub OIDC (cosign)
       #    Sign image + attestations
