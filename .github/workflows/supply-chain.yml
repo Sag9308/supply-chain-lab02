@@ -124,6 +124,13 @@ jobs:
           echo "IMAGE_REF=${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
           echo "Built image ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
 
+      - name: Attest build provenance (SLSA)
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+ 
       # -------------------------
       # 4) Create extra attestations:
       #    - SBOM (Syft)
@@ -258,24 +265,42 @@ jobs:
           sudo mv rekor-cli /usr/local/bin/rekor-cli
           rekor-cli version
 
-      - name: Check Rekor entries (expect 6)
+      - name: Check Rekor entries (expect >=6)
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: |
           # Suche über Digest.
-          DIGEST="${{ steps.digest.outputs.DIGEST }}"
-          echo "Digest: $DIGEST"
+          # DIGEST="${{ steps.digest.outputs.DIGEST }}"
+          # echo "Digest: $DIGEST"
+          # nicht nach digest suchen, sondern nach image_ref - es kann nämlich sein, dass der img_digest bei manchen artefakten gar nicht drin ist
+          set -euo pipefail
+          IMG="${{ steps.digest.outputs.IMAGE_REF }}"
 
           # Rekor expects sha256:<hex>
-          UUIDS=$(rekor-cli search --sha "$DIGEST" | tr -d '\r' || true)
-          echo "$UUIDS"
+          # OLD Solution: UUIDS=$(rekor-cli search --sha "$DIGEST" | tr -d '\r' || true)
+          # OLD Solution: echo "$UUIDS"
 
-          COUNT=$(echo "$UUIDS" | sed '/^\s*$/d' | wc -l | tr -d ' ')
-          echo "Rekor entry count: $COUNT"
+          # 1) Image signature logIndex
+          SIG_COUNT=$(cosign verify \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --output json "$IMG" | jq -r '.[].optional.Bundle.Payload.logIndex' | wc -l | tr -d ' ')
+          
+          # OLD Sol: COUNT=$(echo "$UUIDS" | sed '/^\s*$/d' | wc -l | tr -d ' ')
+          # OLD Sol: echo "Rekor entry count: $COUNT"
+        
+          # 2) Attestations logIndex (spdx + vuln + provenance usw.)
+          ATT_COUNT=$(cosign verify-attestation \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --output json "$IMG" | jq -r '.[].optional.Bundle.Payload.logIndex' | wc -l | tr -d ' ')
 
+          TOTAL=$((SIG_COUNT + ATT_COUNT))
+          echo "Rekor entries (from cosign bundles): signature=$SIG_COUNT attestations=$ATT_COUNT total=$TOTAL"
+         
           # Erwartung: 6 Entries = 1 Signatur + 5 Attestations
           # (je nach Registry/OCI-Mode kann es leicht variieren, aber Ziel ist 6)
           if [ "$COUNT" -lt 6 ]; then
-            echo "Expected at least 6 Rekor entries but got $COUNT"
+            echo "Expected at least 6 Rekor entries but got $TOTAL"
             exit 1
           fi
