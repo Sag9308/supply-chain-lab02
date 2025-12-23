@@ -71,7 +71,7 @@ jobs:
       # (3) Dockerfile / config scan
       - name: Dockerfile/Config (Trivy config) - fail on HIGH/CRITICAL
         run: |
-          trivy config --exit-code 1 --severity HIGH,CRITICAL --no-progress .
+          trivy config --exit-code 1 --severity HIGH,CRITICAL .
 
       # (4) IaC Scan (Checkov) - fail on HIGH/CRITICAL
       - name: IaC (Checkov) - fail on HIGH/CRITICAL
