@@ -153,7 +153,7 @@ jobs:
         run: |
           set -euo pipefail
           trivy config --format json --output vuln-config.json \
-            --severity HIGH,CRITICAL --no-progress . || true
+            --severity HIGH,CRITICAL --quiet . || true
           test -s vuln-config.json
           echo "Created vuln-config.json"
 
