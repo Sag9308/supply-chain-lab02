@@ -8,6 +8,7 @@ permissions:
   contents: read
   packages: write
   id-token: write   # OIDC for keyless cosign signing
+  attestations: write # für actions/attest-build-provenance@v1 API Call via Github Attestation zu persistieren
 
 env:
   IMAGE_NAME: ghcr.io/${{ (github.repository_owner) }}/supply-chain-app
