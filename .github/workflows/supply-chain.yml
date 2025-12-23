@@ -10,7 +10,7 @@ permissions:
   id-token: write   # OIDC for keyless cosign signing
 
 env:
-  IMAGE_NAME: ghcr.io/${{ toLower(github.repository_owner) }}/supply-chain-app
+  IMAGE_NAME: ghcr.io/${{ (github.repository_owner) }}/supply-chain-app
   TAG: ${{ github.sha }}
 
 jobs:
@@ -20,6 +20,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Normalize IMAGE_NAME to lowercase
+        run: |
+          echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/supply-chain-app" >> $GITHUB_ENV
+          echo "Using IMAGE_NAME=$IMAGE_NAME"
+
 
       # -------------------------
       # 1) Tooling installieren
