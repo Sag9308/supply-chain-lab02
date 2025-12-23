@@ -266,7 +266,7 @@ jobs:
           chmod +x rekor-cli
           sudo mv rekor-cli /usr/local/bin/rekor-cli
           rekor-cli version
-          
+
       - name: Check Rekor entries (expect >=6)
         env:
           COSIGN_EXPERIMENTAL: "true"
