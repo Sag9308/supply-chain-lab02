@@ -238,6 +238,7 @@ jobs:
           # SBOM
           cosign verify-attestation \
             --type spdx \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${{ steps.digest.outputs.IMAGE_REF }}" >/dev/null
 
@@ -245,6 +246,7 @@ jobs:
           # Wir prüfen hier presence; in einer Härtung würdest du auch Inhalte auswerten.
           cosign verify-attestation \
             --type vuln \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${{ steps.digest.outputs.IMAGE_REF }}" >/dev/null
 
