@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 # Install system dependencies including Docker CLI
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git jq ca-certificates gnupg lsb-release \
     && curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
     && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
@@ -32,3 +32,10 @@ RUN LATEST_VERSION=$(curl -s https://api.github.com/repos/sigstore/rekor/release
     && chmod +x /usr/local/bin/rekor-cli
 
 WORKDIR /workspace
+
+# Create non-root user for runtime
+RUN useradd --create-home --shell /bin/bash appuser \
+ && mkdir -p /workspace \
+ && chown -R appuser:appuser /workspace
+ 
+USER appuser
