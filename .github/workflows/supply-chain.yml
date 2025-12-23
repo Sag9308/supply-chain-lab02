@@ -78,7 +78,12 @@ jobs:
         run: |
           # Checkov hat unterschiedliche Policies; wir machen strikt.
           # Falls dein Repo viel "Noise" hat, später gezielt skip/soften.
-          checkov -d . --quiet --soft-fail false
+          checkov -d src/iac --quiet 
+
+      # (5) Kubernetes Manifests (Trivy)
+      - name: K8s Manifests (Trivy)
+        run: |
+          trivy config src/k8s --exit-code 1 --severity HIGH,CRITICAL
 
       # -------------------------
       # 3) Build & Push (with provenance + SBOM via BuildKit)
