@@ -271,18 +271,14 @@ jobs:
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: |
-          # Suche über Digest.
-          # DIGEST="${{ steps.digest.outputs.DIGEST }}"
-          # echo "Digest: $DIGEST"
-          # nicht nach digest suchen, sondern nach image_ref - es kann nämlich sein, dass der img_digest bei manchen artefakten gar nicht drin ist
+        # Suche über Digest.
+        # DIGEST="${{ steps.digest.outputs.DIGEST }}"
+        # echo "Digest: $DIGEST"
+        # nicht nach digest suchen, sondern nach image_ref - es kann nämlich sein, dass der img_digest bei manchen artefakten gar nicht drin ist
           set -euo pipefail
           IMG="${{ steps.digest.outputs.IMAGE_REF }}"
 
-          # Rekor expects sha256:<hex>
-          # OLD Solution: UUIDS=$(rekor-cli search --sha "$DIGEST" | tr -d '\r' || true)
-          # OLD Solution: echo "$UUIDS"
-
-          # 1) Image signature logIndex
+        # 1) Image signature logIndex
           SIG_COUNT=$(cosign verify \
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
