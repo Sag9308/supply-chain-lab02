@@ -279,30 +279,36 @@ jobs:
           SIG_COUNT=$(cosign verify \
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            --output json "$IMG" | jq -r '.[].optional.Bundle.Payload.logIndex' | wc -l | tr -d ' ')
+            --output json "$IMG" 2>/dev/null \
+            | jq -r '.. | .logIndex? // empty' \
+            | wc -l | tr -d ' ')
                  
           #2) Attestations logIndex zählen (spdx + vuln + slsa provenance)
-          SPDX_COUNT=$(cosign verify-attestation \
-            --type spdx \
-            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            --output json "$IMG" | jq -r '.[].optional.Bundle.Payload.logIndex' | wc -l | tr -d ' ')
+          ATT_COUNT=$(
+            {
+              cosign verify-attestation \
+                --type spdx \
+                --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
+                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+                --output json "$IMG" 2>/dev/null
 
-          VULN_COUNT=$(cosign verify-attestation \
-            --type vuln \
-            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            --output json "$IMG" | jq -r '.[].optional.Bundle.Payload.logIndex' | wc -l | tr -d ' ')
+              cosign verify-attestation \
+                --type vuln \
+                --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
+                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+                --output json "$IMG" 2>/dev/null
 
-          #SLSA provenance (actions/attest-build-provenance)
-          SLSA_COUNT=$(cosign verify-attestation \
-            --type slsaprovenance \
-            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            --output json "$IMG" | jq -r '.[].optional.Bundle.Payload.logIndex' | wc -l | tr -d ' ')
+              cosign verify-attestation \
+                --type slsaprovenance \
+                --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
+                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+                --output json "$IMG" 2>/dev/null
+          } | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' '
+          )
+          
+          TOTAL=$((SIG_COUNT + ATT_COUNT))
+          echo "Rekor entries (from cosign bundles): signature=$SIG_COUNT attestations=$ATT_COUNT total=$TOTAL"
 
-          ATT_COUNT=$((SPDX_COUNT + VULN_COUNT + SLSA_COUNT))
-         
           #Erwartung: 6 Entries = 1 Signatur + 5 Attestations
           #(je nach Registry/OCI-Mode kann es leicht variieren, aber Ziel ist 6)
           if [ "$TOTAL" -lt 6 ]; then
