@@ -312,6 +312,121 @@ jobs:
           #Erwartung: 6 Entries = 1 Signatur + 5 Attestations
           #(je nach Registry/OCI-Mode kann es leicht variieren, aber Ziel ist 6)
           if [ "$TOTAL" -lt 6 ]; then
-            echo "Expected at least 6 Rekor entries but got $TOTAL"
+            echo "WARN: Expected at least 6 Rekor entries but got $TOTAL (may vary due to bundling)"
+            exit 0
+          fi
+
+      - name: Check signatures/attestations + Rekor logging
+        env:
+          COSIGN_EXPERIMENTAL: "true"
+        run: |
+          set -euo pipefail
+          IMG="${{ steps.digest.outputs.IMAGE_REF }}"
+          ID_RE="https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main"
+          ISSUER="https://token.actions.githubusercontent.com"
+
+          echo "Checking for image: $IMG"
+
+          #1) Image signature exists + is logged in Rekor (logIndex present)
+          SIG_JSON=$(cosign verify \
+            --certificate-identity-regexp "$ID_RE" \
+            --certificate-oidc-issuer "$ISSUER" \
+            --output json "$IMG")
+
+          SIG_COUNT=$(echo "$SIG_JSON" | jq 'length')
+          SIG_LOGGED=$(echo "$SIG_JSON" | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          
+          echo "Signature count: $SIG_COUNT"
+          echo "Signatures with Rekor logIndex: $SIG_LOGGED"
+          
+          if [ "$SIG_COUNT" -lt 1 ]; then
+            echo "ERROR: No signatures found"
             exit 1
           fi
+          if [ "$SIG_LOGGED" -lt 1 ]; then
+            echo "ERROR: Signature not logged to Rekor (no logIndex)"
+            exit 1
+          fi
+
+          # 2) SBOM attestation exists + logged
+          SBOM_JSON=$(cosign verify-attestation \
+            --type spdx \
+            --certificate-identity-regexp "$ID_RE" \
+            --certificate-oidc-issuer "$ISSUER" \
+            --output json "$IMG")
+          
+          SBOM_COUNT=$(echo "$SBOM_JSON" | jq 'length')
+          SBOM_LOGGED=$(echo "$SBOM_JSON" | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          
+          echo "SBOM attestations: $SBOM_COUNT"
+          echo "SBOM attestations with Rekor logIndex: $SBOM_LOGGED"
+          
+          if [ "$SBOM_COUNT" -lt 1 ]; then
+            echo "ERROR: Missing SBOM (spdx) attestation"
+            exit 1
+          fi
+          if [ "$SBOM_LOGGED" -lt 1 ]; then
+            echo "ERROR: SBOM attestation not logged to Rekor"
+            exit 1
+          fi
+
+          # 3) Vulnerability attestations (expect at least 3) + logged
+          VULN_JSON=$(cosign verify-attestation \
+            --type vuln \
+            --certificate-identity-regexp "$ID_RE" \
+            --certificate-oidc-issuer "$ISSUER" \
+            --output json "$IMG")
+          
+          VULN_COUNT=$(echo "$VULN_JSON" | jq 'length')
+          VULN_LOGGED=$(echo "$VULN_JSON" | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          
+          echo "Vuln attestations: $VULN_COUNT"
+          echo "Vuln attestations with Rekor logIndex: $VULN_LOGGED"
+          
+          if [ "$VULN_COUNT" -lt 3 ]; then
+            echo "ERROR: Expected at least 3 vuln attestations, got $VULN_COUNT"
+            exit 1
+          fi
+          if [ "$VULN_LOGGED" -lt 3 ]; then
+            echo "ERROR: Not all vuln attestations appear logged to Rekor"
+            exit 1
+          fi
+
+          # 4) Provenance (SLSA) — depends how you create it
+          # If you're using actions/attest-build-provenance, it creates a GitHub attestation
+          # and may also push to registry. Cosign type might be "slsaprovenance" or "provenance".
+          # We'll try both (don't fail on first).
+          set +e
+          cosign verify-attestation \
+            --type slsaprovenance \
+            --certificate-identity-regexp "$ID_RE" \
+            --certificate-oidc-issuer "$ISSUER" \
+            --output json "$IMG" >/tmp/prov.json 2>/dev/null
+          RC=$?
+          if [ $RC -ne 0 ]; then
+            cosign verify-attestation \
+              --type provenance \
+              --certificate-identity-regexp "$ID_RE" \
+              --certificate-oidc-issuer "$ISSUER" \
+              --output json "$IMG" >/tmp/prov.json
+            RC=$?
+          fi
+          set -e
+        
+          if [ $RC -ne 0 ]; then
+            echo "ERROR: Missing provenance attestation (type slsaprovenance/provenance)"
+            exit 1
+          fi
+        
+          PROV_COUNT=$(cat /tmp/prov.json | jq 'length')
+          PROV_LOGGED=$(cat /tmp/prov.json | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          echo "Provenance attestations: $PROV_COUNT"
+          echo "Provenance attestations with Rekor logIndex: $PROV_LOGGED"
+        
+          if [ "$PROV_LOGGED" -lt 1 ]; then
+            echo "ERROR: Provenance attestation not logged to Rekor"
+            exit 1
+          fi
+        
+          echo "All checks passed ✅"
+
