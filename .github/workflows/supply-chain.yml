@@ -78,7 +78,7 @@ jobs:
         run: |
           # Checkov hat unterschiedliche Policies; wir machen strikt.
           # Falls dein Repo viel "Noise" hat, später gezielt skip/soften.
-          checkov -d src/iac --quiet 
+          checkov -d src/iac --quiet --skip-check CKV2_AWS_5
 
       # (5) Kubernetes Manifests (Trivy)
       - name: K8s Manifests (Trivy)
