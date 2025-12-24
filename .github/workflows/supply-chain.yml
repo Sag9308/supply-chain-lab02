@@ -335,7 +335,7 @@ jobs:
             --output json "$IMG")
 
           SIG_COUNT=$(echo "$SIG_JSON" | jq 'length')
-          SIG_LOGGED=$(echo "$SIG_JSON" | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          SIG_LOGGED=$(echo "$SIG_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')
           
           echo "Signature count: $SIG_COUNT"
           echo "Signatures with Rekor logIndex: $SIG_LOGGED"
@@ -357,7 +357,7 @@ jobs:
             --output json "$IMG")
           
           SBOM_COUNT=$(echo "$SBOM_JSON" | jq 'length')
-          SBOM_LOGGED=$(echo "$SBOM_JSON" | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          SBOM_LOGGED=$(echo "$SBOM_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')          
           
           echo "SBOM attestations: $SBOM_COUNT"
           echo "SBOM attestations with Rekor logIndex: $SBOM_LOGGED"
@@ -379,7 +379,7 @@ jobs:
             --output json "$IMG")
           
           VULN_COUNT=$(echo "$VULN_JSON" | jq 'length')
-          VULN_LOGGED=$(echo "$VULN_JSON" | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          VULN_LOGGED=$(echo "$VULN_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')
           
           echo "Vuln attestations: $VULN_COUNT"
           echo "Vuln attestations with Rekor logIndex: $VULN_LOGGED"
@@ -420,7 +420,7 @@ jobs:
           fi
         
           PROV_COUNT=$(cat /tmp/prov.json | jq 'length')
-          PROV_LOGGED=$(cat /tmp/prov.json | jq '[.[].bundle.payload.logIndex? // empty] | length')
+          PROV_LOGGED=$(cat /tmp/prov.json | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')
           echo "Provenance attestations: $PROV_COUNT"
           echo "Provenance attestations with Rekor logIndex: $PROV_LOGGED"
         
