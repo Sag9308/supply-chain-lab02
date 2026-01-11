@@ -80,12 +80,12 @@ jobs:
         run: |
           trivy config --exit-code 1 --severity HIGH,CRITICAL .
 
-      # (4) IaC Scan (Checkov) - fail on HIGH/CRITICAL
+      # (4) IaC Scan (Checkov) 
       - name: IaC (Checkov) - fail on HIGH/CRITICAL
         run: |
           # Checkov hat unterschiedliche Policies; wir machen strikt.
           # Falls Repo viel "Noise" hat, später gezielt skip/soften.
-          checkov -d src/iac --quiet --skip-check CKV2_AWS_5 --checkov-severity HIGH,CRITICAL
+          checkov -d src/iac --quiet --skip-check CKV2_AWS_5
 
       # (5) Kubernetes Manifests (Trivy)
       - name: K8s Manifests (Trivy) - faile on HIGH/CRITICAL
