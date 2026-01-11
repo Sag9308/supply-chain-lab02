@@ -249,6 +249,7 @@ jobs:
             --type spdx \
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --insecure-ignore-tlog=false \
             "${{ steps.digest.outputs.IMAGE_REF }}" >/dev/null
 
           # Vulnerability attestations (3 Stück vorhanden)
@@ -392,39 +393,24 @@ jobs:
             exit 1
           fi
 
-          # 4) Provenance (SLSA) — depends how you create it
-          # If you're using actions/attest-build-provenance, it creates a GitHub attestation
-          # and may also push to registry. Cosign type might be "slsaprovenance" or "provenance".
-          # We'll try both (don't fail on first).
-          set +e
-          cosign verify-attestation \
-            --type slsaprovenance \
-            --certificate-identity-regexp "$ID_RE" \
-            --certificate-oidc-issuer "$ISSUER" \
-            --output json "$IMG" >/tmp/prov.json 2>/dev/null
-          RC=$?
-          if [ $RC -ne 0 ]; then
-            cosign verify-attestation \
-              --type provenance \
-              --certificate-identity-regexp "$ID_RE" \
-              --certificate-oidc-issuer "$ISSUER" \
-              --output json "$IMG" >/tmp/prov.json
-            RC=$?
-          fi
-          set -e
-        
-          if [ $RC -ne 0 ]; then
-            echo "ERROR: Missing provenance attestation (type slsaprovenance/provenance)"
-            exit 1
-          fi
-        
-          PROV_COUNT=$(cat /tmp/prov.json | jq 'length')
-          PROV_LOGGED=$(cat /tmp/prov.json | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')
-          echo "Provenance attestations: $PROV_COUNT"
-          echo "Provenance attestations with Rekor logIndex: $PROV_LOGGED"
-        
-          if [ "$PROV_LOGGED" -lt 1 ]; then
-            echo "ERROR: Provenance attestation not logged to Rekor"
+          # 4) Provenance (SLSA) — created with Github Action (cf line128-133)
+          echo "🔍 Verifying GitHub SLSA provenance attestation for image: $IMAGE"
+
+          if gh attestation verify "$IMAGE" \
+            --repo "${{ github.repository }}" \
+            --predicate-type "https://slsa.dev/provenance/v1"; then
+
+            echo "✅ Provenance attestation FOUND and VERIFIED"
+            echo "   - Type: SLSA v1"
+            echo "   - Repo: ${{ github.repository }}"
+            echo "   - Image: $IMAGE"
+
+          else
+            echo "❌ ERROR: Provenance attestation NOT FOUND or INVALID"
+            echo "   Expected:"
+            echo "   - Created by actions/attest-build-provenance@v1"
+            echo "   - Repo: ${{ github.repository }}"
+            echo "   - Predicate: https://slsa.dev/provenance/v1"
             exit 1
           fi
         
