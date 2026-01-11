@@ -29,15 +29,15 @@ jobs:
 
 
       # -------------------------
-      # 1) Tooling installieren
+      # 1) Tooling installieren die wichtig für Security in der Pipeline sind
       # -------------------------
-      - name: Install cosign
+      - name: Install cosign #signiert Container images, SBOMs und Attestations
         uses: sigstore/cosign-installer@v3.6.0
 
-      - name: Install syft
+      - name: Install syft #erstellt SBOMs
         uses: anchore/sbom-action/download-syft@v0.16.0
 
-      - name: Install trivy (CLI)
+      - name: Install trivy (CLI) #vulnerability scanner
         run: |
           sudo apt-get update
           sudo apt-get install -y wget gnupg lsb-release
@@ -47,12 +47,12 @@ jobs:
           sudo apt-get install -y trivy
           trivy --version
 
-      - name: Install semgrep
+      - name: Install semgrep #Static Application Security Testing
         run: |
           python3 -m pip install --upgrade pip
           pip install semgrep
 
-      - name: Install checkov
+      - name: Install checkov #IaC Security Scanner
         run: |
           python3 -m pip install --upgrade pip
           pip install checkov
@@ -66,8 +66,8 @@ jobs:
       - name: SAST (Semgrep) - fail on findings
         run: |
           semgrep --version
-          # Beispiel-Regeln: "p/default" ist guter Start.
-          # Optional später: eigene ruleset/policy
+          #Beispiel-Regeln: "p/default" ist guter Start.
+          #Optional später: eigene ruleset/policy
           semgrep scan --config "p/default" --error
 
       # (2) Dependency / filesystem scan (SCA)
@@ -84,11 +84,11 @@ jobs:
       - name: IaC (Checkov) - fail on HIGH/CRITICAL
         run: |
           # Checkov hat unterschiedliche Policies; wir machen strikt.
-          # Falls dein Repo viel "Noise" hat, später gezielt skip/soften.
-          checkov -d src/iac --quiet --skip-check CKV2_AWS_5
+          # Falls Repo viel "Noise" hat, später gezielt skip/soften.
+          checkov -d src/iac --quiet --skip-check CKV2_AWS_5 --checkov-severity HIGH,CRITICAL
 
       # (5) Kubernetes Manifests (Trivy)
-      - name: K8s Manifests (Trivy)
+      - name: K8s Manifests (Trivy) - faile on HIGH/CRITICAL
         run: |
           trivy config src/k8s --exit-code 1 --severity HIGH,CRITICAL
 
@@ -223,7 +223,7 @@ jobs:
 
       # -------------------------
       # 6) Verification (policy-like checks)
-      #    - verfify provenance
+      #    - verify provenance
       #    - verify image signature
       #    - verify attestations
       #    - check Rekor entries (expect 6)
@@ -252,7 +252,6 @@ jobs:
             "${{ steps.digest.outputs.IMAGE_REF }}" >/dev/null
 
           # Vulnerability attestations (3 Stück vorhanden)
-          # Wir prüfen hier presence; in einer Härtung würdest du auch Inhalte auswerten.
           cosign verify-attestation \
             --type vuln \
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
