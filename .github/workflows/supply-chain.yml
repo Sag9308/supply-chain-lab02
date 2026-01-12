@@ -305,13 +305,21 @@ jobs:
             --type spdx \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
-            --output json "$IMG")
+            --output json "$IMG" 2>&1)
+
+          # 2a) Stelle sicher, dass es JSON ist (sonst ist es eine Fehl-/Textausgabe)
+          if ! echo "$SBOM_JSON" | jq -e . >/dev/null 2>&1; then
+            echo "ERROR: cosign verify-attestation did not return JSON for SBOM."
+            echo "Raw output was:"
+            echo "$SBOM_JSON"
+            exit 1
+          fi
 
           echo "SBOM logIndex values:"
           echo "$SBOM_JSON" | jq -r '.[] | "logIndex=\(.logIndex // "NONE")"'
                     
           SBOM_COUNT=$(echo "$SBOM_JSON" | jq 'length')
-          SBOM_LOGGED=$(echo "$SBOM_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')          
+          SBOM_LOGGED=$(echo "$SBOM_JSON" | jq '[.[].logIndex | select(. != null)] | length')        
           
           echo "SBOM attestations: $SBOM_COUNT"
           echo "SBOM attestations with Rekor logIndex: $SBOM_LOGGED"
