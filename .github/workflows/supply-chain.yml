@@ -305,7 +305,8 @@ jobs:
             --type spdx \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
-            --output json "$IMG")
+            --output json "$IMG"
+          | jq -r '.[] | "logIndex=\(.logIndex // "NONE")"')
           
           SBOM_COUNT=$(echo "$SBOM_JSON" | jq 'length')
           SBOM_LOGGED=$(echo "$SBOM_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')          
