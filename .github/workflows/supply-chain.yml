@@ -267,56 +267,6 @@ jobs:
           sudo mv rekor-cli /usr/local/bin/rekor-cli
           rekor-cli version
           
-      - name: Check Rekor entries (expect >=6)
-        continue-on-error: true
-        env:
-          COSIGN_EXPERIMENTAL: "true"
-        run: |
-          #nicht nach digest suchen, sondern nach image_ref - es kann nämlich sein, dass der img_digest bei manchen artefakten gar nicht drin ist
-          set -euo pipefail
-          IMG="${{ steps.digest.outputs.IMAGE_REF }}"
-
-          #1) Image signature logIndex
-          SIG_COUNT=$(cosign verify \
-            --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
-            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-            --output json "$IMG" 2>/dev/null \
-            | jq -r '.. | .logIndex? // empty' \
-            | wc -l | tr -d ' ')
-                 
-          #2) Attestations logIndex zählen (spdx + vuln + slsa provenance)
-          ATT_COUNT=$(
-            {
-              cosign verify-attestation \
-                --type spdx \
-                --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
-                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-                --output json "$IMG" 2>/dev/null
-
-              cosign verify-attestation \
-                --type vuln \
-                --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
-                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-                --output json "$IMG" 2>/dev/null
-
-              cosign verify-attestation \
-                --type slsaprovenance \
-                --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
-                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-                --output json "$IMG" 2>/dev/null
-          } | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' '
-          )
-          
-          TOTAL=$((SIG_COUNT + ATT_COUNT))
-          echo "Rekor entries (from cosign bundles): signature=$SIG_COUNT attestations=$ATT_COUNT total=$TOTAL"
-
-          #Erwartung: 6 Entries = 1 Signatur + 5 Attestations
-          #(je nach Registry/OCI-Mode kann es leicht variieren, aber Ziel ist 6)
-          if [ "$TOTAL" -lt 6 ]; then
-            echo "WARN: Expected at least 6 Rekor entries but got $TOTAL (may vary due to bundling)"
-            exit 0
-          fi
-
       - name: Check signatures/attestations + Rekor logging
         env:
           COSIGN_EXPERIMENTAL: "true"
