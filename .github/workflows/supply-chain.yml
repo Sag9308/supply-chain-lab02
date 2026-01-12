@@ -192,6 +192,7 @@ jobs:
           cosign attest --yes \
             --predicate sbom.spdx.json \
             --type spdx \
+            --tlog-upload=true \
             "${{ steps.digest.outputs.IMAGE_REF }}"
 
       - name: Cosign attest vuln #1 (image)
