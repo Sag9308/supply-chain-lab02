@@ -1,4 +1,4 @@
-name: supply-chain #Test2000
+name: supply-chain 
 
 on:
   push:
@@ -274,7 +274,7 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
         run: |
           set -euo pipefail
-          IMG="${{ steps.digest.outputs.IMAGE_REF }}"
+          IMAGE="${{ steps.digest.outputs.IMAGE_REF }}"
           ID_RE="https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main"
           ISSUER="https://token.actions.githubusercontent.com"
 
@@ -284,7 +284,7 @@ jobs:
           SIG_JSON=$(cosign verify \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
-            --output json "$IMG")
+            --output json "$IMAGE")
 
           SIG_COUNT=$(echo "$SIG_JSON" | jq 'length')
           SIG_LOGGED=$(echo "$SIG_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')
@@ -306,7 +306,7 @@ jobs:
             --type spdx \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
-            --output json "$IMG" 2>&1)
+            --output json "$IMAGE" 2>&1)
 
           # 2a) Stelle sicher, dass es JSON ist (sonst ist es eine Fehl-/Textausgabe)
           if ! echo "$SBOM_JSON" | jq -e . >/dev/null 2>&1; then
@@ -320,7 +320,7 @@ jobs:
           echo "$SBOM_JSON" | jq -r '.. | objects | .logIndex? // empty | "logIndex=\(.)"'
                     
           SBOM_COUNT=$(echo "$SBOM_JSON" | jq 'length')
-          SBOM_LOGGED=$(echo "$SBOM_JSON" | jq '[.[].logIndex | select(. != null)] | length')        
+          SBOM_LOGGED=$(echo "$SBOM_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')      
           
           echo "SBOM attestations: $SBOM_COUNT"
           echo "SBOM attestations with Rekor logIndex: $SBOM_LOGGED"
@@ -339,7 +339,7 @@ jobs:
             --type vuln \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
-            --output json "$IMG")
+            --output json "$IMAGE")
           
           VULN_COUNT=$(echo "$VULN_JSON" | jq 'length')
           VULN_LOGGED=$(echo "$VULN_JSON" | jq -r '.. | .logIndex? // empty' | wc -l | tr -d ' ')
