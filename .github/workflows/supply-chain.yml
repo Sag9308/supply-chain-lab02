@@ -278,7 +278,7 @@ jobs:
           ID_RE="https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main"
           ISSUER="https://token.actions.githubusercontent.com"
 
-          echo "Checking for image: $IMG"
+          echo "Checking for image: $IMAGE"
 
           #1) Image signature exists + is logged in Rekor (logIndex present)
           SIG_JSON=$(cosign verify \
