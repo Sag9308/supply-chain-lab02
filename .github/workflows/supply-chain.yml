@@ -247,8 +247,8 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
         run: |
           # SBOM
-          cosign verify-attestation \
-            --type spdx \
+          cosign verify-attestation --experimental-oci11 \
+            --type spdxjson \
             --certificate-identity-regexp "https://github.com/${{ github.repository }}/.github/workflows/supply-chain.yml@refs/heads/main" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             --insecure-ignore-tlog=false \
@@ -281,7 +281,7 @@ jobs:
           echo "Checking for image: $IMAGE"
 
           #1) Image signature exists + is logged in Rekor (logIndex present)
-          SIG_JSON=$(cosign verify \
+          SIG_JSON=$(cosign verify --experimental-oci11 \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
             --output json "$IMAGE")
@@ -302,7 +302,7 @@ jobs:
           fi
 
           # 2) SBOM attestation exists + logged
-          SBOM_JSON=$(cosign verify-attestation \
+          SBOM_JSON=$(cosign verify-attestation --experimental-oci11 \
             --type spdx \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
@@ -332,7 +332,7 @@ jobs:
           fi
 
           # 3) Vulnerability attestations (expect at least 3) + logged
-          VULN_JSON=$(cosign verify-attestation \
+          VULN_JSON=$(cosign verify-attestation --experimental-oci11 \
             --type vuln \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
