@@ -67,10 +67,10 @@ jobs:
         run: |
           semgrep --version
           #Beispiel-Regeln: "p/default" ist guter Start.
-          #Optional später: eigene ruleset/policy
+          #Optional später: ruleset/policy hier einfügen
           semgrep scan --config "p/default" --error
 
-      # (2) Dependency / filesystem scan (SCA)
+      # (2) Dependencies / filesystem scan (SCA)
       - name: SCA (Trivy fs) - fail on HIGH/CRITICAL
         run: |
           trivy fs --exit-code 1 --severity HIGH,CRITICAL --no-progress .
@@ -316,7 +316,7 @@ jobs:
           fi
 
           echo "SBOM logIndex values:"
-          echo "$SBOM_JSON" | jq -r '.[] | "logIndex=\(.logIndex // "NONE")"'
+          echo "$SBOM_JSON" | jq -r '.. | objects | .logIndex? // empty | "logIndex=\(.)"'
                     
           SBOM_COUNT=$(echo "$SBOM_JSON" | jq 'length')
           SBOM_LOGGED=$(echo "$SBOM_JSON" | jq '[.[].logIndex | select(. != null)] | length')        
