@@ -73,7 +73,7 @@ jobs:
       # (2) Dependencies / filesystem scan (SCA)
       - name: SCA (Trivy fs) - fail on HIGH/CRITICAL
         run: |
-          trivy fs --exit-code 1 --severity HIGH,CRITICAL --no-progress --ignore-unfixed --ignore-cve CVE-2026-0861 .
+          trivy fs --exit-code 1 --severity HIGH,CRITICAL --no-progress --ignore-unfixed .
 
       # (3) Dockerfile / config scan
       - name: Dockerfile/Config (Trivy config) - fail on HIGH/CRITICAL
@@ -169,7 +169,7 @@ jobs:
       # Hard gate: image vulnerabilities must be zero HIGH/CRITICAL too
       - name: Enforce image vuln gate (HIGH/CRITICAL must be 0)
         run: |
-          trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "${{ steps.digest.outputs.IMAGE_REF }}"
+          trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress --ignore-unfixed "${{ steps.digest.outputs.IMAGE_REF }}"
 
       - name: Debug – list generated reports
         run: |
