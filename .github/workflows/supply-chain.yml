@@ -301,8 +301,8 @@ jobs:
           fi
 
           # 2) SBOM attestation exists + logged
-          SBOM_JSON=$(cosign verify-attestation --experimental-oci11 \
-            --type spdx \
+          SBOM_JSON=$(cosign verify \
+            --type spdxjson \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
             --output json "$IMAGE" 2>&1)
@@ -310,8 +310,6 @@ jobs:
           # 2a) Sicherstellen, dass es JSON ist (sonst ist es eine Fehl-/Textausgabe)
           if ! echo "$SBOM_JSON" | jq -e . >/dev/null 2>&1; then
             echo "ERROR: cosign verify-attestation did not return JSON for SBOM."
-            echo "Raw output was:"
-            echo "$SBOM_JSON"
             exit 1
           fi
           
@@ -331,7 +329,7 @@ jobs:
           fi
 
           # 3) Vulnerability attestations (expect at least 3) + logged
-          VULN_JSON=$(cosign verify-attestation --experimental-oci11 \
+          VULN_JSON=$(cosign verify \
             --type vuln \
             --certificate-identity-regexp "$ID_RE" \
             --certificate-oidc-issuer "$ISSUER" \
